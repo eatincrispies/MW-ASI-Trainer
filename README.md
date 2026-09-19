@@ -29,7 +29,7 @@ apply next launch.
 | Cheat | What it does |
 | --- | --- |
 | `BustProof` | The busted meter never fills. You cannot be busted. |
-| `SpikeProof` | Spike strips can't pop your tyres. |
+| `SpikeProof` | Spike strips can't pop your tires. |
 | `InfiniteNitro` | Your nitro never runs out once you have some in the bottle. |
 | `InfiniteSpeedbreaker` | Speedbreaker lasts as long as you hold it. |
 | `TankMode` | During a pursuit you hit like a truck — cops and Rhinos get shoved out of your way. |
