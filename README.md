@@ -1,4 +1,4 @@
-# PursuitCheats
+# MW: Pursuit Trainer
 
 A pursuit ASI trainer for Need for Speed: Most Wanted (2005, PC). Switch on what
 you want in one INI — never get busted, shrug off spike strips, run forever on
