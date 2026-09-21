@@ -1,6 +1,6 @@
-# PursuitCheats - 32-bit ASI plugin
+# MWCheats - 32-bit ASI plugin
 #
-#   mingw32-make                     build build/PursuitCheats.asi
+#   mingw32-make                     build build/MWCheats.asi
 #   mingw32-make clean
 #   mingw32-make install GAME="C:/path/to/NFSMW"
 #
@@ -9,8 +9,9 @@
 # build falls back to VirtualQuery-based pointer validation.
 
 CXX      ?= g++
-TARGET   := build/PursuitCheats.asi
-SOURCES  := src/dllmain.cpp src/NFSMW/Pursuit.cpp
+TARGET   := build/MWCheats.asi
+SOURCES  := src/dllmain.cpp $(wildcard src/NFSMW/*.cpp)
+HEADERS  := src/dllmain.hpp $(wildcard src/NFSMW/*.hpp)
 
 CXXFLAGS := -m32 -std=c++20 -O2 -Wall -Wextra -fno-strict-aliasing \
             -fno-exceptions -fno-rtti -DNOMINMAX -DWIN32_LEAN_AND_MEAN
@@ -21,7 +22,7 @@ LDFLAGS  := -m32 -shared -static -static-libgcc -static-libstdc++ \
 
 all: $(TARGET)
 
-$(TARGET): $(SOURCES) src/NFSMW/Pursuit.hpp
+$(TARGET): $(SOURCES) $(HEADERS)
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) $(SOURCES) $(LDFLAGS) -o $@
 
@@ -34,5 +35,5 @@ ifndef GAME
 endif
 	@mkdir -p "$(GAME)/scripts"
 	cp $(TARGET) "$(GAME)/scripts/"
-	cp PursuitCheats.ini "$(GAME)/scripts/"
+	cp MWCheats.ini "$(GAME)/scripts/"
 	@echo "Installed to $(GAME)/scripts"
