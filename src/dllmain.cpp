@@ -36,6 +36,7 @@
 #include "NFSMW/UnlockSystemIsCarPartUnlocked.hpp"
 #include "NFSMW/UnlockSystemIsCarUnlocked.hpp"
 #include "NFSMW/UnlockSystemIsPerfPackageUnlocked.hpp"
+#include "NFSMW/eDisplayFrame.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -306,8 +307,9 @@ namespace {
     public:
         IniSection(const std::string& path, const char* name) : path_(path), name_(name) {}
 
-        [[nodiscard]] bool Bool(const char* key) const {
+        [[nodiscard]] bool Bool(const char* key, bool fallback = false) const {
             const std::string value = Value(key);
+            if (value.empty()) return fallback;
             return value == "true" || value == "1" || value == "yes" || value == "on";
         }
 
@@ -533,18 +535,24 @@ namespace {
         }
     }
 
-    DWORD WINAPI Startup(LPVOID) {
+    DWORD WINAPI Startup(LPVOID module) {
         const std::string directory = ModuleDirectory();
         const std::string ini       = directory + "\\MWCheats.ini";
+        const IniSection  main{ ini, "Main" };
 
         Installer installer;
-        ApplyMain(IniSection{ ini, "Main" }, installer);
+        const bool popup = main.Bool("LoadedPopup", true);
+        if (popup) installer.Check("LoadedPopup", eDisplayFrame::InstallPopup(static_cast<HMODULE>(module)));
+
+        ApplyMain(main, installer);
         ApplyCareer(IniSection{ ini, "Career" }, installer);
         ApplyPursuit(IniSection{ ini, "Pursuit" }, installer);
 
         std::string line = "Mod injected and applied to v1.3 and " + HostMd5();
         if (!installer.Skipped().empty()) line += " (skipped: " + installer.Skipped() + ")";
         WriteLog(directory, line);
+
+        if (popup) eDisplayFrame::ShowPopup();
         return 0;
     }
 
@@ -553,7 +561,7 @@ namespace {
 BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID) {
     if (reason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(module);
-        if (const HANDLE thread = CreateThread(nullptr, 0, Startup, nullptr, 0, nullptr)) CloseHandle(thread);
+        if (const HANDLE thread = CreateThread(nullptr, 0, Startup, module, 0, nullptr)) CloseHandle(thread);
     }
     return TRUE;
 }
