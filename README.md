@@ -1,4 +1,4 @@
-# MWCheats WIP
+# MWCheats
 
 A cheat trainer for Need for Speed: Most Wanted (2005, PC) that lives in one
 INI file. Turn on what you want: endless nitro, a car that never loses grip,
@@ -86,6 +86,26 @@ A few things worth knowing:
 - `InfiniteGrip` takes the slide out of handbrake turns too.
 - `GhostCops` on its own doesn't stop busts — the busted meter works on
   distance, so pair it with `BustProof` if that's what you're after.
+
+## The popup
+
+When the game starts, an Xbox 360 style "Achievement unlocked" popup slides
+out at the top of the screen with the achievement chime, then fades away. It
+shows up once all your cheats are applied, so it's a quick way to know the mod
+loaded. Set `LoadedPopup = false` under `[Main]` if you'd rather not see it.
+
+## The log
+
+Every launch writes `MWCheats.log` next to the ASI:
+
+```
+Mod injected and applied to v1.3 and C0516B485065FABDD69579816B5DF763
+```
+
+That hash is your own `speed.exe`, so a patched exe will show something
+different and that's normal. If another mod has already changed the same part
+of the game, the cheat that couldn't be applied is listed as skipped instead of
+being forced in.
 
 ## Building
 
