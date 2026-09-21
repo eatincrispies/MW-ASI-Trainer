@@ -94,19 +94,6 @@ out at the top of the screen with the achievement chime, then fades away. It
 shows up once all your cheats are applied, so it's a quick way to know the mod
 loaded. Set `LoadedPopup = false` under `[Main]` if you'd rather not see it.
 
-## The log
-
-Every launch writes `MWCheats.log` next to the ASI:
-
-```
-Mod injected and applied to v1.3 and C0516B485065FABDD69579816B5DF763
-```
-
-That hash is your own `speed.exe`, so a patched exe will show something
-different and that's normal. If another mod has already changed the same part
-of the game, the cheat that couldn't be applied is listed as skipped instead of
-being forced in.
-
 ## Building
 
 Only if you want to compile it yourself. Open `MWCheats.sln` and build
