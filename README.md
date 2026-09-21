@@ -87,19 +87,6 @@ A few things worth knowing:
 - `GhostCops` on its own doesn't stop busts — the busted meter works on
   distance, so pair it with `BustProof` if that's what you're after.
 
-## The log
-
-Every launch writes `MWCheats.log` next to the ASI:
-
-```
-Mod injected and applied to v1.3 and C0516B485065FABDD69579816B5DF763
-```
-
-That hash is your own `speed.exe`, so a patched exe will show something
-different and that's normal. If another mod has already changed the same part
-of the game, the cheat that couldn't be applied is listed as skipped instead of
-being forced in.
-
 ## Building
 
 Only if you want to compile it yourself. Open `MWCheats.sln` and build
