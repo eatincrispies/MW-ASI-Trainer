@@ -1,5 +1,8 @@
 # MWCheats
 
+> **Work in progress.** This mod is still being built, and it will be
+> finished when it is ready. Patience is key.
+
 A cheat trainer for Need for Speed: Most Wanted (2005, PC) that lives in one
 INI file. Turn on what you want: endless nitro, a car that never loses grip,
 every car and part unlocked, free impound, a trip to the Blacklist without the
@@ -64,7 +67,7 @@ next launch.
 | `TankMode` | During a pursuit you hit like a truck — cops and Rhinos get shoved out of your way. |
 | `GhostCops` | You drive straight through cop cars. Traffic and walls are still solid. |
 | `DisableHelicopter` | The police helicopter never shows up. |
-| `MaxHelicopters` | How many police helicopters can chase you at once. `1` is normal. Once the first one arrives, the rest join a few seconds apart. |
+| `MaxHelicopters` | How many police helicopters can chase you at once. `1` is normal. Once the first one arrives, the rest join a few seconds apart, and each one gets its own minimap icon. |
 | `InfiniteHelicopterFuel` | The helicopter never runs dry and flies off. |
 | `DisableRoadblocks` | Cops never set up roadblocks ahead of you. |
 | `DisableReinforcements` | No Rhino heavy units, and no Cross showing up to join the chase. |
@@ -74,6 +77,7 @@ next launch.
 | `FreezeHeatLevel` | Locks your heat at `SetHeatLevel` so it never rises or drops. |
 | `TouchOfDeathCops` | Any cop car you hit is wrecked on the spot. |
 | `PursuitBreakerNuke` | Knock down one pursuit breaker and every cop car on the map is wrecked, and the helicopters head home. |
+| `PaperWeightCops` | Cop cars weigh almost nothing, so the smallest tap sends them flying. |
 
 ### Misc
 
@@ -95,8 +99,8 @@ A few things worth knowing:
 - `UnlockAllBlacklist` doesn't skip the rivals themselves. You still beat them
   one at a time, you just don't have to earn the right first.
 - The game was built around a single helicopter, so with `MaxHelicopters` above
-  `1` the extra ones may not get their own minimap icon or radio chatter.
-  `DisableHelicopter` wins if both are set.
+  `1` the extra ones share the radio chatter of the first. They do each get
+  their own minimap icon. `DisableHelicopter` wins if both are set.
 - `PursuitBreakerNuke` doesn't end the pursuit. With every cop wrecked you'll
   usually slip into cooldown, but new units can still be called in.
 - `InfiniteGrip` takes the slide out of handbrake turns too.
@@ -128,6 +132,10 @@ being forced in.
 Only if you want to compile it yourself. Open `MWCheats.sln` and build
 Release|Win32, or run `build.bat` with a 32-bit MinGW-w64 g++ that supports
 C++20. The runtime is linked statically, so there's nothing extra to install.
+
+## Credits
+
+`PaperWeightCops` was KingVector11's idea. Thanks!
 
 ## License
 
