@@ -78,6 +78,7 @@ namespace Memory {
 namespace Scan {
 
     [[nodiscard]] std::optional<std::uintptr_t> Find(const Memory::Pattern& pattern) noexcept;
+    [[nodiscard]] bool At(std::uintptr_t address, const Memory::Pattern& pattern) noexcept;
     [[nodiscard]] std::optional<std::uintptr_t> Absolute(std::uintptr_t operand) noexcept;
     [[nodiscard]] std::optional<std::uintptr_t> Relative(std::uintptr_t operand) noexcept;
 
@@ -140,6 +141,9 @@ namespace Hook {
 
     [[nodiscard]] bool Detour(ScopedHook& slot, const Memory::Pattern& pattern, std::size_t stolenBytes,
                               const void* detour, std::uintptr_t& original) noexcept;
+
+    [[nodiscard]] bool Detour(ScopedHook& slot, std::uintptr_t target, std::size_t stolenBytes, const void* detour,
+                              std::uintptr_t& original) noexcept;
 
     [[nodiscard]] bool Thunk(ScopedHook& slot, std::uintptr_t site, std::size_t length, const void* function) noexcept;
 

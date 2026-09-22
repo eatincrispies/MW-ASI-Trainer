@@ -2,7 +2,9 @@
 
 #include <wincrypt.h>
 
+#include "NFSMW/AICopManagerApplyBreakerZones.hpp"
 #include "NFSMW/AICopManagerSpawnPursuitHelicopter.hpp"
+#include "NFSMW/AICopManagerUpdatePursuits.hpp"
 #include "NFSMW/AIPursuitCopRequest.hpp"
 #include "NFSMW/AIPursuitOnTask.hpp"
 #include "NFSMW/AIPursuitRequestGroundSupport.hpp"
@@ -14,7 +16,9 @@
 #include "NFSMW/AIVehicleHumanIPerpetrator.hpp"
 #include "NFSMW/BinGetNumChallengesPassed.hpp"
 #include "NFSMW/BinGetNumRacesWon.hpp"
+#include "NFSMW/CameraMoverFovCubicInit.hpp"
 #include "NFSMW/CareerSettingsSpendCash.hpp"
+#include "NFSMW/CubicCameraMoverUpdate.hpp"
 #include "NFSMW/DamageRacerPuncture.hpp"
 #include "NFSMW/EngineRacerDoNos.hpp"
 #include "NFSMW/EngineRacerGetEngineTorque.hpp"
@@ -22,6 +26,8 @@
 #include "NFSMW/FEDatabase.hpp"
 #include "NFSMW/FEMarkerManagerAddMarkerToInventory.hpp"
 #include "NFSMW/FEMarkerSelectionNotificationMessage.hpp"
+#include "NFSMW/FEPlayerCarDBCreateNewCareerCar.hpp"
+#include "NFSMW/FEPlayerCarDBDefault.hpp"
 #include "NFSMW/FEngHudDetermineHudFeatures.hpp"
 #include "NFSMW/FEngineUpdate.hpp"
 #include "NFSMW/GRaceParametersGetCashValue.hpp"
@@ -36,6 +42,7 @@
 #include "NFSMW/UnlockSystemIsCarPartUnlocked.hpp"
 #include "NFSMW/UnlockSystemIsCarUnlocked.hpp"
 #include "NFSMW/UnlockSystemIsPerfPackageUnlocked.hpp"
+#include "NFSMW/UserProfileLoadFromBuffer.hpp"
 #include "NFSMW/eDisplayFrame.hpp"
 
 #include <algorithm>
@@ -175,6 +182,11 @@ namespace Scan {
         return found;
     }
 
+    bool At(std::uintptr_t address, const Memory::Pattern& pattern) noexcept {
+        const auto* at = reinterpret_cast<const std::uint8_t*>(address);
+        return pattern.size != 0 && IsReadable(at, pattern.size) && Matches(at, pattern);
+    }
+
     std::optional<std::uintptr_t> Absolute(std::uintptr_t operand) noexcept {
         const auto value = Memory::Read<std::uint32_t>(operand);
         if (!value) return std::nullopt;
@@ -234,23 +246,28 @@ namespace Hook {
     bool Detour(ScopedHook& slot, const Memory::Pattern& pattern, std::size_t stolenBytes, const void* detour,
                 std::uintptr_t& original) noexcept {
         if (slot) return true;
-        if (stolenBytes < kBranchSize || stolenBytes > kMaxStolen) return false;
 
         const auto target = Scan::Find(pattern);
-        if (!target) return false;
+        return target && Detour(slot, *target, stolenBytes, detour, original);
+    }
+
+    bool Detour(ScopedHook& slot, std::uintptr_t target, std::size_t stolenBytes, const void* detour,
+                std::uintptr_t& original) noexcept {
+        if (slot) return true;
+        if (stolenBytes < kBranchSize || stolenBytes > kMaxStolen || target == 0) return false;
 
         slot.block.emplace(kMaxStolen + kBranchSize);
-        if (!*slot.block || !Memory::SafeCopy(slot.block->data(), reinterpret_cast<const void*>(*target), stolenBytes)) {
+        if (!*slot.block || !Memory::SafeCopy(slot.block->data(), reinterpret_cast<const void*>(target), stolenBytes)) {
             slot.Reset();
             return false;
         }
-        EncodeBranch(slot.block->data() + stolenBytes, kJump, slot.block->address() + stolenBytes, *target + stolenBytes);
+        EncodeBranch(slot.block->data() + stolenBytes, kJump, slot.block->address() + stolenBytes, target + stolenBytes);
         original = slot.block->address();
 
         std::array<std::uint8_t, kMaxStolen> jump{};
         jump.fill(kNop);
-        EncodeBranch(jump.data(), kJump, *target, reinterpret_cast<std::uintptr_t>(detour));
-        if (Engage(slot, *target, std::span{ jump.data(), stolenBytes })) return true;
+        EncodeBranch(jump.data(), kJump, target, reinterpret_cast<std::uintptr_t>(detour));
+        if (Engage(slot, target, std::span{ jump.data(), stolenBytes })) return true;
 
         original = 0;
         return false;
@@ -376,6 +393,15 @@ namespace {
         return false;
     }
 
+    bool InstallEveryVehicle() noexcept {
+        return FEPlayerCarDBDefault::InstallEveryVehicle() && UserProfileLoadFromBuffer::Install() &&
+               FEPlayerCarDBCreateNewCareerCar::InstallPresetParts();
+    }
+
+    bool InstallFieldOfView(float degrees) noexcept {
+        return CubicCameraMoverUpdate::InstallFieldOfView(degrees) && CameraMoverFovCubicInit::Install();
+    }
+
     bool InstallInfiniteJunkmanParts() noexcept {
         return FEMarkerManagerAddMarkerToInventory::EnableEndlessPerformanceMarkers() && FEngineUpdate::Install();
     }
@@ -394,10 +420,13 @@ namespace {
     bool InstallHelicopterLimit(int maxHelicopters) noexcept {
         if (!AICopManagerSpawnPursuitHelicopter::InstallLimit(maxHelicopters)) return false;
         if (AIPursuitCopRequest::InstallLimit(AICopManagerSpawnPursuitHelicopter::HeliVehicle(),
-                                              AICopManagerSpawnPursuitHelicopter::Gate())) {
+                                              AICopManagerSpawnPursuitHelicopter::Gate()) &&
+            AICopManagerUpdatePursuits::InstallHelicopterTopUp(AICopManagerSpawnPursuitHelicopter::Spawner(),
+                                                               maxHelicopters)) {
             return true;
         }
 
+        AIPursuitCopRequest::RemoveLimit();
         AICopManagerSpawnPursuitHelicopter::RemoveLimit();
         return false;
     }
@@ -420,7 +449,10 @@ namespace {
         if (const float cash = career.Float("CashMultiplier", 1.0f, 0.0f, 1000.0f); cash != 1.0f) {
             installer.Check("CashMultiplier", GRaceParametersGetCashValue::Install(cash));
         }
-        installer.Toggle(career, "UnlockAllCars", UnlockSystemIsCarUnlocked::Install);
+        if (career.Bool("UnlockAllCars")) {
+            installer.Check("UnlockAllCars", UnlockSystemIsCarUnlocked::Install());
+            installer.Check("UnlockAllCars extra cars", InstallEveryVehicle());
+        }
         installer.Toggle(career, "UnlockAllPerformanceParts", UnlockSystemIsPerfPackageUnlocked::Install);
         installer.Toggle(career, "UnlockAllVisualParts", UnlockSystemIsCarPartUnlocked::Install);
         installer.Toggle(career, "InfiniteJunkmanParts", InstallInfiniteJunkmanParts);
@@ -463,6 +495,13 @@ namespace {
             installer.Check("FreezeHeatLevel", AIVehicleHumanIPerpetrator::InstallHeatLock(heat));
         }
         installer.Toggle(pursuit, "TouchOfDeathCops", AIVehicleHumanICause::InstallTouchOfDeath);
+        installer.Toggle(pursuit, "PursuitBreakerNuke", AICopManagerApplyBreakerZones::InstallNuke);
+    }
+
+    void ApplyMisc(const IniSection& misc, Installer& installer) {
+        if (const float degrees = misc.Float("FOVSlider", 0.0f, -60.0f, 90.0f); degrees != 0.0f) {
+            installer.Check("FOVSlider", InstallFieldOfView(degrees));
+        }
     }
 
     std::string ModuleDirectory() {
@@ -538,15 +577,16 @@ namespace {
     DWORD WINAPI Startup(LPVOID module) {
         const std::string directory = ModuleDirectory();
         const std::string ini       = directory + "\\MWCheats.ini";
-        const IniSection  main{ ini, "Main" };
+        const IniSection  misc{ ini, "Misc" };
 
         Installer installer;
-        const bool popup = main.Bool("LoadedPopup", true);
+        const bool popup = misc.Bool("LoadedPopup", true);
         if (popup) installer.Check("LoadedPopup", eDisplayFrame::InstallPopup(static_cast<HMODULE>(module)));
 
-        ApplyMain(main, installer);
+        ApplyMain(IniSection{ ini, "Main" }, installer);
         ApplyCareer(IniSection{ ini, "Career" }, installer);
         ApplyPursuit(IniSection{ ini, "Pursuit" }, installer);
+        ApplyMisc(misc, installer);
 
         std::string line = "Mod injected and applied to v1.3 and " + HostMd5();
         if (!installer.Skipped().empty()) line += " (skipped: " + installer.Skipped() + ")";
