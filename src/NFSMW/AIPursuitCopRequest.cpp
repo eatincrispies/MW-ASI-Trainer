@@ -27,4 +27,8 @@ namespace AIPursuitCopRequest {
         return Hook::Thunk(g_limit, *match + kHeliCheck, kHeliCheckLength, gate);
     }
 
+    void RemoveLimit() noexcept {
+        g_limit.Reset();
+    }
+
 }

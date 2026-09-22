@@ -16,6 +16,7 @@ namespace AICopManagerSpawnPursuitHelicopter {
         constexpr std::ptrdiff_t              kHeliVehicleRead = 28;
         constexpr std::size_t                 kHeliCheckLength = 5;
 
+        std::uintptr_t             g_spawner        = 0;
         std::uintptr_t             g_heliVehicle    = 0;
         int                        g_maxHelicopters = 1;
         std::optional<ScopedPatch> g_disable;
@@ -43,6 +44,7 @@ namespace AICopManagerSpawnPursuitHelicopter {
         const auto heliVehicle = Scan::Absolute(*match + kHeliVehicleRead);
         if (!heliVehicle || *heliVehicle == 0) return false;
 
+        g_spawner        = *match;
         g_heliVehicle    = *heliVehicle;
         g_maxHelicopters = maxHelicopters;
         return Hook::Thunk(g_limit, *match + kHeliCheck, kHeliCheckLength, Gate());
@@ -54,6 +56,10 @@ namespace AICopManagerSpawnPursuitHelicopter {
 
     std::uintptr_t HeliVehicle() noexcept {
         return g_heliVehicle;
+    }
+
+    std::uintptr_t Spawner() noexcept {
+        return g_spawner;
     }
 
     const void* Gate() noexcept {
