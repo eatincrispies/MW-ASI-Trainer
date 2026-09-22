@@ -2,6 +2,8 @@
 
 #include "../dllmain.hpp"
 #include "ICopMgrInstance.hpp"
+#include "IRBVehicleHandle.hpp"
+#include "ISimable.hpp"
 
 #include <algorithm>
 
@@ -21,16 +23,24 @@ namespace AICopManagerUpdatePursuits {
         constexpr std::ptrdiff_t kNodeNext         = 0x0;
         constexpr std::ptrdiff_t kNodeValue        = 0x8;
         constexpr std::ptrdiff_t kIsPlayerPursuit  = 0x8C;
+        constexpr std::ptrdiff_t kVehicles         = 0xC8;
+        constexpr std::ptrdiff_t kVehicleCount     = 0xD0;
+        constexpr std::ptrdiff_t kIsUnavailable    = 0x7C;
+        constexpr std::ptrdiff_t kIsActive         = 0x88;
+        constexpr std::ptrdiff_t kGetSimable       = 0x04;
+        constexpr std::ptrdiff_t kGetMass          = 0x18;
+        constexpr float          kPaperWeightScale = 0.1f;
         constexpr float          kTopUpDelay       = 5.0f;
         constexpr float          kMaxStep          = 0.25f;
 
-        using UpdatePursuitsFn = void(__thiscall*)(void*);
+        using UpdatePursuitsFn  = void(__thiscall*)(void*);
         using SpawnHelicopterFn = bool(__thiscall*)(void*, void*);
 
         std::uintptr_t g_original        = 0;
         std::uintptr_t g_spawnHelicopter = 0;
         std::ptrdiff_t g_pursuits        = 0;
         int            g_maxHelicopters  = 1;
+        bool           g_paperWeight     = false;
         float          g_waited          = 0.0f;
         std::int64_t   g_lastTick        = 0;
         double         g_frequency       = 1.0;
@@ -75,9 +85,42 @@ namespace AICopManagerUpdatePursuits {
             }
         }
 
+        void LightenCops(void* manager) {
+            for (int index = 0; index < Game::Field<int>(manager, kVehicleCount); ++index) {
+                void** const vehicles = Game::Field<void**>(manager, kVehicles);
+                void* const  vehicle  = vehicles != nullptr ? vehicles[index] : nullptr;
+                if (vehicle == nullptr || Game::CallVirtual<bool>(vehicle, kIsUnavailable) ||
+                    !Game::CallVirtual<bool>(vehicle, kIsActive)) {
+                    continue;
+                }
+
+                void* const simable   = Game::CallVirtual<void*>(vehicle, kGetSimable);
+                void* const rbVehicle = IRBVehicleHandle::Get(simable);
+                void* const rigidBody = ISimable::GetRigidBody(simable);
+                if (rbVehicle == nullptr || rigidBody == nullptr) continue;
+
+                const float mass = Game::CallVirtual<float>(rigidBody, kGetMass);
+                IRBVehicleHandle::SetCollisionMass(rbVehicle, mass * kPaperWeightScale);
+            }
+        }
+
         void __fastcall UpdatePursuits(void* manager, void*) {
             reinterpret_cast<UpdatePursuitsFn>(g_original)(manager);
-            Memory::Guarded([&] { TopUp(manager); });
+            Memory::Guarded([&] {
+                if (g_maxHelicopters > 1) TopUp(manager);
+                if (g_paperWeight) LightenCops(manager);
+            });
+        }
+
+        bool Engage() noexcept {
+            if (g_detour) return true;
+
+            LARGE_INTEGER frequency{};
+            if (QueryPerformanceFrequency(&frequency) && frequency.QuadPart > 0) {
+                g_frequency = static_cast<double>(frequency.QuadPart);
+            }
+            return Hook::Detour(g_detour, kUpdatePursuits, kStolenBytes,
+                                reinterpret_cast<const void*>(&UpdatePursuits), g_original);
         }
 
     }
@@ -86,22 +129,24 @@ namespace AICopManagerUpdatePursuits {
         if (spawnHelicopter == 0) return false;
 
         const auto field = Hook::Operand(kPursuitList, kPursuitListField);
-        if (!field || *field == 0) return false;
-
-        LARGE_INTEGER frequency{};
-        if (QueryPerformanceFrequency(&frequency) && frequency.QuadPart > 0) {
-            g_frequency = static_cast<double>(frequency.QuadPart);
-        }
+        if (!field || *field == 0 || !Engage()) return false;
 
         g_pursuits        = static_cast<std::ptrdiff_t>(*field);
         g_spawnHelicopter = spawnHelicopter;
         g_maxHelicopters  = maxHelicopters;
-        return Hook::Detour(g_detour, kUpdatePursuits, kStolenBytes, reinterpret_cast<const void*>(&UpdatePursuits),
-                            g_original);
+        return true;
+    }
+
+    bool InstallPaperWeightCops() noexcept {
+        if (!IRBVehicleHandle::Resolve() || !Engage()) return false;
+
+        g_paperWeight = true;
+        return true;
     }
 
     void RemoveHelicopterTopUp() noexcept {
-        g_detour.Reset();
+        g_maxHelicopters = 1;
+        if (!g_paperWeight) g_detour.Reset();
     }
 
 }
