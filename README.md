@@ -45,7 +45,7 @@ next launch.
 | --- | --- |
 | `InfiniteCash` | Your wallet stays full, and buying things never costs you. |
 | `CashMultiplier` | Multiplies the prize money from races. `1.0` is normal. |
-| `UnlockAllCars` | Every car in the car lot is for sale. |
+| `UnlockAllCars` | Every car in the car lot is for sale, plus the traffic cars, cop cars, the police helicopter and the AI racers' preset cars. |
 | `UnlockAllPerformanceParts` | Every performance upgrade is available in the shop. |
 | `UnlockAllVisualParts` | Every body kit, rim, spoiler and paint is available. |
 | `InfiniteJunkmanParts` | You always have Junkman performance parts to install. |
@@ -64,7 +64,7 @@ next launch.
 | `TankMode` | During a pursuit you hit like a truck — cops and Rhinos get shoved out of your way. |
 | `GhostCops` | You drive straight through cop cars. Traffic and walls are still solid. |
 | `DisableHelicopter` | The police helicopter never shows up. |
-| `MaxHelicopters` | How many police helicopters can chase you at once. `1` is normal. |
+| `MaxHelicopters` | How many police helicopters can chase you at once. `1` is normal. Once the first one arrives, the rest join a few seconds apart. |
 | `InfiniteHelicopterFuel` | The helicopter never runs dry and flies off. |
 | `DisableRoadblocks` | Cops never set up roadblocks ahead of you. |
 | `DisableReinforcements` | No Rhino heavy units, and no Cross showing up to join the chase. |
@@ -73,16 +73,32 @@ next launch.
 | `BountyMultiplier` | Multiplies the bounty you earn in pursuits. `1.0` is normal. |
 | `FreezeHeatLevel` | Locks your heat at `SetHeatLevel` so it never rises or drops. |
 | `TouchOfDeathCops` | Any cop car you hit is wrecked on the spot. |
+| `PursuitBreakerNuke` | Knock down one pursuit breaker and every cop car on the map is wrecked, and the helicopters head home. |
+
+### Misc
+
+| Setting | What it does |
+| --- | --- |
+| `LoadedPopup` | The achievement popup when the game starts. On unless you set it to `false`. |
+| `FOVSlider` | Widens (or narrows) the view in every car you drive, in degrees. `0` is stock, `20` is noticeably wider. |
 
 A few things worth knowing:
 
 - `InfiniteCash` and `InfiniteJunkmanParts` put real money and parts in your
   career. They stay in your save after you turn the cheats off.
+- `UnlockAllCars` adds the extra cars to your profile, so they stay in your
+  save too. It leaves room for your own cars, so if your garage is very full
+  not every preset will fit. Back up your save before trying it the first time.
+- Preset cars you buy in the car lot keep their body kits and paint.
+- The helicopter shows up in the car lot too, but it was never built to be
+  driven. Racing with it can behave oddly or crash the game.
 - `UnlockAllBlacklist` doesn't skip the rivals themselves. You still beat them
   one at a time, you just don't have to earn the right first.
 - The game was built around a single helicopter, so with `MaxHelicopters` above
   `1` the extra ones may not get their own minimap icon or radio chatter.
   `DisableHelicopter` wins if both are set.
+- `PursuitBreakerNuke` doesn't end the pursuit. With every cop wrecked you'll
+  usually slip into cooldown, but new units can still be called in.
 - `InfiniteGrip` takes the slide out of handbrake turns too.
 - `GhostCops` on its own doesn't stop busts — the busted meter works on
   distance, so pair it with `BustProof` if that's what you're after.
@@ -92,7 +108,20 @@ A few things worth knowing:
 When the game starts, an Xbox 360 style "Achievement unlocked" popup slides
 out at the top of the screen with the achievement chime, then fades away. It
 shows up once all your cheats are applied, so it's a quick way to know the mod
-loaded. Set `LoadedPopup = false` under `[Main]` if you'd rather not see it.
+loaded. Set `LoadedPopup = false` under `[Misc]` if you'd rather not see it.
+
+## The log
+
+Every launch writes `MWCheats.log` next to the ASI:
+
+```
+Mod injected and applied to v1.3 and C0516B485065FABDD69579816B5DF763
+```
+
+That hash is your own `speed.exe`, so a patched exe will show something
+different and that's normal. If another mod has already changed the same part
+of the game, the cheat that couldn't be applied is listed as skipped instead of
+being forced in.
 
 ## Building
 
