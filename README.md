@@ -1,3 +1,16 @@
+<div align="center">
+
+[![Status](https://img.shields.io/badge/Status-Paused-critical?style=flat-square)]()
+[![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
+
+</div>
+
+---
+
+> [!IMPORTANT]
+> **Projects Temporarily Paused**
+> All updates, bug fixes, and support for this project are temporarily paused until further notice due to family issues and personal matters. 
+
 # MWCheats
 
 > **Work in progress.** This mod is still being built, and it will be
