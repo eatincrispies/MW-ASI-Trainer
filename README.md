@@ -11,6 +11,8 @@
 > **Projects Temporarily Paused**
 > All updates, bug fixes, and support for this project are temporarily paused until further notice due to family issues and personal matters. 
 
+<img src="dunce.png" width="200" alt="Thumbnail">
+
 # MWCheats
 
 > **Work in progress.** This mod is still being built, and it will be
