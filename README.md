@@ -11,7 +11,7 @@
 > **Projects Temporarily Paused**
 > All updates, bug fixes, and support for this project are temporarily paused until further notice due to family issues and personal matters. 
 
-![Thumbnail](dunce.png)
+![Thumbnail](Dunce.png)
 
 # MWCheats
 
