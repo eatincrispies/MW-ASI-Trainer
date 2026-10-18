@@ -2,49 +2,6 @@
 
 #include <wincrypt.h>
 
-#include "NFSMW/AICopManagerApplyBreakerZones.hpp"
-#include "NFSMW/AICopManagerSpawnPursuitHelicopter.hpp"
-#include "NFSMW/AICopManagerUpdatePursuits.hpp"
-#include "NFSMW/AIPursuitCopRequest.hpp"
-#include "NFSMW/AIPursuitOnTask.hpp"
-#include "NFSMW/AIPursuitRequestGroundSupport.hpp"
-#include "NFSMW/AIPursuitRequestRoadBlock.hpp"
-#include "NFSMW/AITrafficManagerComputeDensity.hpp"
-#include "NFSMW/AIVehicleCopCarCheckForPursuit.hpp"
-#include "NFSMW/AIVehicleHelicopterUpdateFuel.hpp"
-#include "NFSMW/AIVehicleHumanICause.hpp"
-#include "NFSMW/AIVehicleHumanIPerpetrator.hpp"
-#include "NFSMW/BinGetNumChallengesPassed.hpp"
-#include "NFSMW/BinGetNumRacesWon.hpp"
-#include "NFSMW/CameraMoverFovCubicInit.hpp"
-#include "NFSMW/CareerSettingsSpendCash.hpp"
-#include "NFSMW/CubicCameraMoverUpdate.hpp"
-#include "NFSMW/DamageRacerPuncture.hpp"
-#include "NFSMW/EngineRacerDoNos.hpp"
-#include "NFSMW/EngineRacerGetEngineTorque.hpp"
-#include "NFSMW/FECarRecordGetReleaseFromImpoundCost.hpp"
-#include "NFSMW/FEDatabase.hpp"
-#include "NFSMW/FEMarkerManagerAddMarkerToInventory.hpp"
-#include "NFSMW/FEMarkerSelectionNotificationMessage.hpp"
-#include "NFSMW/FEPlayerCarDBCreateNewCareerCar.hpp"
-#include "NFSMW/FEPlayerCarDBDefault.hpp"
-#include "NFSMW/FEngHudDetermineHudFeatures.hpp"
-#include "NFSMW/FEngineUpdate.hpp"
-#include "NFSMW/GRaceParametersGetCashValue.hpp"
-#include "NFSMW/GRaceStatusComputeCatchUpSkill.hpp"
-#include "NFSMW/GRaceStatusGetTimeRemaining.hpp"
-#include "NFSMW/GRaceStatusUpdate.hpp"
-#include "NFSMW/GameGetPlayerBounty.hpp"
-#include "NFSMW/PostPursuitInfractionsScreenNotificationMessage.hpp"
-#include "NFSMW/RBVehicleCanCollideWith.hpp"
-#include "NFSMW/TireUpdateLoaded.hpp"
-#include "NFSMW/TweakInfiniteRaceBreaker.hpp"
-#include "NFSMW/UnlockSystemIsCarPartUnlocked.hpp"
-#include "NFSMW/UnlockSystemIsCarUnlocked.hpp"
-#include "NFSMW/UnlockSystemIsPerfPackageUnlocked.hpp"
-#include "NFSMW/UserProfileLoadFromBuffer.hpp"
-#include "NFSMW/eDisplayFrame.hpp"
-
 #include <algorithm>
 #include <bit>
 #include <cctype>
@@ -316,193 +273,257 @@ namespace Hook {
         return false;
     }
 
+    bool RedirectCall(std::optional<ScopedPatch>& slot, std::uintptr_t site, const void* replacement,
+                      std::uintptr_t& original) noexcept {
+        if (slot) return true;
+
+        const auto opcode = Memory::Read<std::uint8_t>(site);
+        const auto target = Scan::Relative(site + 1);
+        if (!opcode || *opcode != kCall || !target || !Memory::IsExecutable(reinterpret_cast<const void*>(*target))) return false;
+
+        std::array<std::uint8_t, kBranchSize> call{};
+        EncodeBranch(call.data(), kCall, site, reinterpret_cast<std::uintptr_t>(replacement));
+        original = *target;
+        slot.emplace(site, call);
+        if (*slot) return true;
+
+        slot.reset();
+        original = 0;
+        return false;
+    }
+
+}
+
+bool IniSection::Bool(const char* key, bool fallback) const {
+    const std::string value = Value(key);
+    if (value.empty()) return fallback;
+    return value == "true" || value == "1" || value == "yes" || value == "on";
+}
+
+float IniSection::Float(const char* key, float fallback, float low, float high) const {
+    const std::string value = Value(key);
+    char* end = nullptr;
+    const float parsed = std::strtof(value.c_str(), &end);
+    if (value.empty() || end == value.c_str()) return fallback;
+    return std::clamp(parsed, low, high);
+}
+
+int IniSection::Int(const char* key, int fallback, int low, int high) const {
+    const std::string value = Value(key);
+    char* end = nullptr;
+    const long parsed = std::strtol(value.c_str(), &end, 10);
+    if (value.empty() || end == value.c_str()) return fallback;
+    return static_cast<int>(std::clamp<long>(parsed, low, high));
+}
+
+bool IniSection::Has(const char* key) const {
+    return !Value(key).empty();
+}
+
+std::string IniSection::String(const char* key) const {
+    return Value(key);
+}
+
+std::string IniSection::Value(const char* key) const {
+    std::array<char, 128> buffer{};
+    GetPrivateProfileStringA(name_, key, "", buffer.data(), static_cast<DWORD>(buffer.size()), path_.c_str());
+
+    std::string value{ buffer.data() };
+    if (const auto comment = value.find_first_of(";#"); comment != std::string::npos) value.resize(comment);
+
+    const auto first = value.find_first_not_of(" \t");
+    const auto last  = value.find_last_not_of(" \t");
+    value = first == std::string::npos ? std::string{} : value.substr(first, last - first + 1);
+
+    std::ranges::transform(value, value.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return value;
+}
+
+void Installer::Toggle(const IniSection& section, const char* key, bool (*install)()) {
+    if (section.Bool(key)) Check(key, install());
+}
+
+void Installer::Check(std::string_view feature, bool installed) {
+    if (installed) return;
+    if (!skipped_.empty()) skipped_ += ", ";
+    skipped_ += feature;
 }
 
 namespace {
 
-    class IniSection {
-    public:
-        IniSection(const std::string& path, const char* name) : path_(path), name_(name) {}
+    constexpr Memory::Pattern kVehicleBehaviorConstructor =
+        Memory::ParsePattern("8B 46 34 C7 06 ?? ?? ?? ?? C7 46 08 ?? ?? ?? ?? 8B 48 04 68 ?? ?? ?? ?? E8 ?? ?? ?? ??");
 
-        [[nodiscard]] bool Bool(const char* key, bool fallback = false) const {
-            const std::string value = Value(key);
-            if (value.empty()) return fallback;
-            return value == "true" || value == "1" || value == "yes" || value == "on";
-        }
+    constexpr std::ptrdiff_t kIVehicleHandlePush = 20;
+    constexpr std::ptrdiff_t kIListFindCall      = 25;
+    constexpr std::ptrdiff_t kCOMObject          = 0x04;
 
-        [[nodiscard]] float Float(const char* key, float fallback, float low, float high) const {
-            const std::string value = Value(key);
-            char* end = nullptr;
-            const float parsed = std::strtof(value.c_str(), &end);
-            if (value.empty() || end == value.c_str()) return fallback;
-            return std::clamp(parsed, low, high);
-        }
+    constexpr std::ptrdiff_t kISimableGetPlayer    = 0x20;
+    constexpr std::ptrdiff_t kISimableGetRigidBody = 0x54;
 
-        [[nodiscard]] int Int(const char* key, int fallback, int low, int high) const {
-            const std::string value = Value(key);
-            char* end = nullptr;
-            const long parsed = std::strtol(value.c_str(), &end, 10);
-            if (value.empty() || end == value.c_str()) return fallback;
-            return static_cast<int>(std::clamp<long>(parsed, low, high));
-        }
+    constexpr std::ptrdiff_t kIRigidBodyGetMass           = 0x18;
+    constexpr std::ptrdiff_t kIRigidBodyGetPosition       = 0x20;
+    constexpr std::ptrdiff_t kIRigidBodyGetLinearVelocity = 0x24;
+    constexpr std::ptrdiff_t kIRigidBodyGetSpeed          = 0x2C;
+    constexpr std::ptrdiff_t kIRigidBodySetPosition       = 0x5C;
+    constexpr std::ptrdiff_t kIRigidBodySetLinearVelocity = 0x60;
 
-    private:
-        [[nodiscard]] std::string Value(const char* key) const {
-            std::array<char, 128> buffer{};
-            GetPrivateProfileStringA(name_, key, "", buffer.data(), static_cast<DWORD>(buffer.size()), path_.c_str());
+    constexpr std::ptrdiff_t kIVehicleGetSimable      = 0x04;
+    constexpr std::ptrdiff_t kIVehicleGetVehicleClass = 0x44;
+    constexpr std::ptrdiff_t kIVehicleGetDriverClass  = 0x58;
+    constexpr std::ptrdiff_t kIVehicleSetVehicleOnGround = 0x68;
+    constexpr std::ptrdiff_t kIVehicleForceStopOn     = 0x6C;
+    constexpr std::ptrdiff_t kIVehicleGetForceStop    = 0x74;
+    constexpr std::ptrdiff_t kIVehicleIsDestroyed     = 0x7C;
+    constexpr std::ptrdiff_t kIVehicleIsActive        = 0x88;
 
-            std::string value{ buffer.data() };
-            if (const auto comment = value.find_first_of(";#"); comment != std::string::npos) value.resize(comment);
+    using IListFindFn = void*(__thiscall*)(void*, void*);
 
-            const auto first = value.find_first_not_of(" \t");
-            const auto last  = value.find_last_not_of(" \t");
-            value = first == std::string::npos ? std::string{} : value.substr(first, last - first + 1);
+    std::uintptr_t g_IListFind      = 0;
+    std::uintptr_t g_IVehicleHandle = 0;
 
-            std::ranges::transform(value, value.begin(),
-                                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            return value;
-        }
+    constexpr Memory::Pattern k___eDisplayFrame =
+        Memory::ParsePattern("55 8B EC 83 E4 F0 81 EC A4 0A 00 00 A1 ?? ?? ?? ?? 53 33 DB");
 
-        const std::string& path_;
-        const char*        name_;
-    };
+    constexpr std::size_t k___eDisplayFrameStolen = 6;
+    constexpr std::size_t kMostFrameCallbacks     = 8;
 
-    class Installer {
-    public:
-        void Toggle(const IniSection& section, const char* key, bool (*install)()) {
-            if (section.Bool(key)) Check(key, install());
-        }
+    using eDisplayFrameFn = void(__cdecl*)();
 
-        void Check(std::string_view feature, bool installed) {
-            if (installed) return;
-            if (!skipped_.empty()) skipped_ += ", ";
-            skipped_ += feature;
-        }
+    std::uintptr_t                           g___eDisplayFrame = 0;
+    std::array<void (*)(), kMostFrameCallbacks> g_frameCallbacks{};
+    std::size_t                              g_numFrameCallbacks = 0;
+    ScopedHook                               g___eDisplayFrameHook;
 
-        [[nodiscard]] const std::string& Skipped() const noexcept { return skipped_; }
+    void __cdecl ___eDisplayFrameHook() {
+        for (std::size_t index = 0; index < g_numFrameCallbacks; ++index) Memory::Guarded(g_frameCallbacks[index]);
+        reinterpret_cast<eDisplayFrameFn>(g___eDisplayFrame)();
+    }
 
-    private:
-        std::string skipped_;
-    };
+}
 
-    bool InstallInfiniteCash() noexcept {
-        if (!CareerSettingsSpendCash::Install()) return false;
-        if (FEDatabase::EnableInfiniteCash() && FEngineUpdate::Install()) return true;
-
-        CareerSettingsSpendCash::Remove();
+bool AddFrameCallback(void (*callback)()) noexcept {
+    if (callback == nullptr || g_numFrameCallbacks >= kMostFrameCallbacks) return false;
+    if (!Hook::Detour(g___eDisplayFrameHook, k___eDisplayFrame, k___eDisplayFrameStolen,
+                      reinterpret_cast<const void*>(&___eDisplayFrameHook), g___eDisplayFrame)) {
         return false;
     }
+    g_frameCallbacks[g_numFrameCallbacks++] = callback;
+    return true;
+}
 
-    bool InstallEveryVehicle() noexcept {
-        return FEPlayerCarDBDefault::InstallEveryVehicle() && UserProfileLoadFromBuffer::Install() &&
-               FEPlayerCarDBCreateNewCareerCar::InstallPresetParts();
+namespace UTL::COM {
+
+    bool IUnknown::Resolve() noexcept {
+        if (g_IListFind != 0) return true;
+
+        const auto find = Hook::Operand(kVehicleBehaviorConstructor, kIListFindCall, true);
+        if (!find || !Memory::IsExecutable(reinterpret_cast<const void*>(*find))) return false;
+
+        g_IListFind = *find;
+        return true;
     }
 
-    bool InstallFieldOfView(float degrees) noexcept {
-        return CubicCameraMoverUpdate::InstallFieldOfView(degrees) && CameraMoverFovCubicInit::Install();
+    void* IUnknown::Find(std::uintptr_t handle) const {
+        if (g_IListFind == 0 || handle == 0) return nullptr;
+
+        void* const object = Game::Field<void*>(const_cast<IUnknown*>(this), kCOMObject);
+        if (object == nullptr) return nullptr;
+        return reinterpret_cast<IListFindFn>(g_IListFind)(object, reinterpret_cast<void*>(handle));
     }
 
-    bool InstallInfiniteJunkmanParts() noexcept {
-        return FEMarkerManagerAddMarkerToInventory::EnableEndlessPerformanceMarkers() && FEngineUpdate::Install();
-    }
+}
 
-    bool InstallBlacklistUnlock() noexcept {
-        if (BinGetNumRacesWon::Install() && BinGetNumChallengesPassed::Install() && GameGetPlayerBounty::Install()) {
-            return true;
-        }
+float IRigidBody::GetMass() const {
+    return Game::CallVirtual<float>(const_cast<IRigidBody*>(this), kIRigidBodyGetMass);
+}
 
-        GameGetPlayerBounty::Remove();
-        BinGetNumChallengesPassed::Remove();
-        BinGetNumRacesWon::Remove();
-        return false;
-    }
+const UMath::Vector3& IRigidBody::GetPosition() const {
+    return *Game::CallVirtual<const UMath::Vector3*>(const_cast<IRigidBody*>(this), kIRigidBodyGetPosition);
+}
 
-    bool InstallHelicopterLimit(int maxHelicopters) noexcept {
-        if (!AICopManagerSpawnPursuitHelicopter::InstallLimit(maxHelicopters)) return false;
-        if (AIPursuitCopRequest::InstallLimit(AICopManagerSpawnPursuitHelicopter::HeliVehicle(),
-                                              AICopManagerSpawnPursuitHelicopter::Gate()) &&
-            AICopManagerUpdatePursuits::InstallHelicopterTopUp(AICopManagerSpawnPursuitHelicopter::Spawner(),
-                                                               maxHelicopters)) {
-            return true;
-        }
+const UMath::Vector3& IRigidBody::GetLinearVelocity() const {
+    return *Game::CallVirtual<const UMath::Vector3*>(const_cast<IRigidBody*>(this), kIRigidBodyGetLinearVelocity);
+}
 
-        AIPursuitCopRequest::RemoveLimit();
-        AICopManagerSpawnPursuitHelicopter::RemoveLimit();
-        return false;
-    }
+float IRigidBody::GetSpeed() const {
+    return Game::CallVirtual<float>(const_cast<IRigidBody*>(this), kIRigidBodyGetSpeed);
+}
 
-    void ApplyMain(const IniSection& main, Installer& installer) {
-        installer.Toggle(main, "InfiniteNitro", EngineRacerDoNos::Install);
-        installer.Toggle(main, "InfiniteSpeedbreaker", TweakInfiniteRaceBreaker::Install);
-        if (const float power = main.Float("EnginePowerMultiplier", 1.0f, 0.1f, 10.0f); power != 1.0f) {
-            installer.Check("EnginePowerMultiplier", EngineRacerGetEngineTorque::Install(power));
-        }
-        installer.Toggle(main, "InfiniteGrip", TireUpdateLoaded::Install);
-        installer.Toggle(main, "DisableRubberbanding", GRaceStatusComputeCatchUpSkill::Install);
-        installer.Toggle(main, "FreezeAI", GRaceStatusUpdate::Install);
-        installer.Toggle(main, "DisableTraffic", AITrafficManagerComputeDensity::Install);
-        installer.Toggle(main, "HideHUD", FEngHudDetermineHudFeatures::Install);
-    }
+void IRigidBody::SetPosition(const UMath::Vector3& position) {
+    Game::CallVirtual<void>(this, kIRigidBodySetPosition, &position);
+}
 
-    void ApplyCareer(const IniSection& career, Installer& installer) {
-        installer.Toggle(career, "InfiniteCash", InstallInfiniteCash);
-        if (const float cash = career.Float("CashMultiplier", 1.0f, 0.0f, 1000.0f); cash != 1.0f) {
-            installer.Check("CashMultiplier", GRaceParametersGetCashValue::Install(cash));
-        }
-        if (career.Bool("UnlockAllCars")) {
-            installer.Check("UnlockAllCars", UnlockSystemIsCarUnlocked::Install());
-            installer.Check("UnlockAllCars extra cars", InstallEveryVehicle());
-        }
-        installer.Toggle(career, "UnlockAllPerformanceParts", UnlockSystemIsPerfPackageUnlocked::Install);
-        installer.Toggle(career, "UnlockAllVisualParts", UnlockSystemIsCarPartUnlocked::Install);
-        installer.Toggle(career, "InfiniteJunkmanParts", InstallInfiniteJunkmanParts);
-        installer.Toggle(career, "UnlockAllBlacklist", InstallBlacklistUnlock);
-        installer.Toggle(career, "AlwaysWinPinkSlip", FEMarkerSelectionNotificationMessage::Install);
-        installer.Toggle(career, "FreeImpoundBail", FECarRecordGetReleaseFromImpoundCost::Install);
-        installer.Toggle(career, "NeverImpoundCar", PostPursuitInfractionsScreenNotificationMessage::Install);
-        installer.Toggle(career, "InfiniteTollboothTime", GRaceStatusGetTimeRemaining::Install);
-    }
+void IRigidBody::SetLinearVelocity(const UMath::Vector3& velocity) {
+    Game::CallVirtual<void>(this, kIRigidBodySetLinearVelocity, &velocity);
+}
 
-    void ApplyPursuit(const IniSection& pursuit, Installer& installer) {
-        const AIPursuitOnTask::Options wanted{
-            .bustProof       = pursuit.Bool("BustProof"),
-            .instantCooldown = pursuit.Bool("InstantCooldown"),
-            .tankMode        = pursuit.Bool("TankMode"),
-        };
-        if (wanted.bustProof || wanted.instantCooldown || wanted.tankMode) {
-            const AIPursuitOnTask::Options active = AIPursuitOnTask::Install(wanted);
-            if (wanted.bustProof) installer.Check("BustProof", active.bustProof);
-            if (wanted.instantCooldown) installer.Check("InstantCooldown", active.instantCooldown);
-            if (wanted.tankMode) installer.Check("TankMode", active.tankMode);
-        }
+bool ISimable::IsPlayer() const {
+    return Game::CallVirtual<void*>(const_cast<ISimable*>(this), kISimableGetPlayer) != nullptr;
+}
 
-        installer.Toggle(pursuit, "SpikeProof", DamageRacerPuncture::Install);
-        installer.Toggle(pursuit, "GhostCops", RBVehicleCanCollideWith::Install);
-        installer.Toggle(pursuit, "DisableHelicopter", AICopManagerSpawnPursuitHelicopter::InstallDisable);
-        if (const int helicopters = pursuit.Int("MaxHelicopters", 1, 1, 8);
-            helicopters > 1 && !pursuit.Bool("DisableHelicopter")) {
-            installer.Check("MaxHelicopters", InstallHelicopterLimit(helicopters));
-        }
-        installer.Toggle(pursuit, "InfiniteHelicopterFuel", AIVehicleHelicopterUpdateFuel::Install);
-        installer.Toggle(pursuit, "DisableRoadblocks", AIPursuitRequestRoadBlock::Install);
-        installer.Toggle(pursuit, "DisableReinforcements", AIPursuitRequestGroundSupport::Install);
-        installer.Toggle(pursuit, "CopsIgnorePlayer", AIVehicleCopCarCheckForPursuit::Install);
-        if (const float bounty = pursuit.Float("BountyMultiplier", 1.0f, 0.0f, 1000.0f); bounty != 1.0f) {
-            installer.Check("BountyMultiplier", AIVehicleHumanIPerpetrator::InstallBountyMultiplier(bounty));
-        }
-        if (pursuit.Bool("FreezeHeatLevel")) {
-            const float heat = pursuit.Float("SetHeatLevel", 5.0f, 1.0f, 10.0f);
-            installer.Check("FreezeHeatLevel", AIVehicleHumanIPerpetrator::InstallHeatLock(heat));
-        }
-        installer.Toggle(pursuit, "TouchOfDeathCops", AIVehicleHumanICause::InstallTouchOfDeath);
-        installer.Toggle(pursuit, "PursuitBreakerNuke", AICopManagerApplyBreakerZones::InstallNuke);
-    }
+IRigidBody* ISimable::GetRigidBody() const {
+    return Game::CallVirtual<IRigidBody*>(const_cast<ISimable*>(this), kISimableGetRigidBody);
+}
 
-    void ApplyMisc(const IniSection& misc, Installer& installer) {
-        if (const float degrees = misc.Float("FOVSlider", 0.0f, -60.0f, 90.0f); degrees != 0.0f) {
-            installer.Check("FOVSlider", InstallFieldOfView(degrees));
-        }
-    }
+bool IVehicle::Resolve() noexcept {
+    if (g_IVehicleHandle != 0) return true;
+    if (!UTL::COM::IUnknown::Resolve()) return false;
+
+    const auto handle = Hook::Operand(kVehicleBehaviorConstructor, kIVehicleHandlePush);
+    if (!handle || *handle == 0) return false;
+
+    g_IVehicleHandle = *handle;
+    return true;
+}
+
+std::uintptr_t IVehicle::_IHandle() noexcept {
+    return g_IVehicleHandle;
+}
+
+ISimable* IVehicle::GetSimable() const {
+    return Game::CallVirtual<ISimable*>(const_cast<IVehicle*>(this), kIVehicleGetSimable);
+}
+
+std::uint32_t IVehicle::GetVehicleClass() const {
+    const auto* const vehicleClass =
+        Game::CallVirtual<const std::uint32_t*>(const_cast<IVehicle*>(this), kIVehicleGetVehicleClass);
+    return vehicleClass != nullptr ? *vehicleClass : 0;
+}
+
+DriverClass IVehicle::GetDriverClass() const {
+    return static_cast<DriverClass>(Game::CallVirtual<int>(const_cast<IVehicle*>(this), kIVehicleGetDriverClass));
+}
+
+void IVehicle::ForceStopOn(char forceStopBits) {
+    Game::CallVirtual<void>(this, kIVehicleForceStopOn, forceStopBits);
+}
+
+char IVehicle::GetForceStop() const {
+    return Game::CallVirtual<char>(const_cast<IVehicle*>(this), kIVehicleGetForceStop);
+}
+
+bool IVehicle::IsDestroyed() const {
+    return Game::CallVirtual<bool>(const_cast<IVehicle*>(this), kIVehicleIsDestroyed);
+}
+
+bool IVehicle::IsActive() const {
+    return Game::CallVirtual<bool>(const_cast<IVehicle*>(this), kIVehicleIsActive);
+}
+
+bool IVehicle::SetVehicleOnGround(const UMath::Vector3& position, const UMath::Vector3& forward) {
+    return Game::CallVirtual<bool>(this, kIVehicleSetVehicleOnGround, &position, &forward);
+}
+
+bool IVehicle::IsDriver(const IVehicle* vehicle, DriverClass driverClass) {
+    return vehicle != nullptr && vehicle->GetDriverClass() == driverClass;
+}
+
+bool IVehicle::IsDriver(const ISimable* simable, DriverClass driverClass) {
+    return simable != nullptr && IsDriver(simable->QueryInterface<IVehicle>(), driverClass);
+}
+
+namespace {
 
     std::string ModuleDirectory() {
         HMODULE module = nullptr;
@@ -580,19 +601,20 @@ namespace {
         const IniSection  misc{ ini, "Misc" };
 
         Installer installer;
-        const bool popup = misc.Bool("LoadedPopup", true);
-        if (popup) installer.Check("LoadedPopup", eDisplayFrame::InstallPopup(static_cast<HMODULE>(module)));
-
+        ApplyQOL(IniSection{ ini, "QOL" }, installer);
+        ApplyMisc(misc, installer, static_cast<HMODULE>(module));
         ApplyMain(IniSection{ ini, "Main" }, installer);
         ApplyCareer(IniSection{ ini, "Career" }, installer);
         ApplyPursuit(IniSection{ ini, "Pursuit" }, installer);
-        ApplyMisc(misc, installer);
+        ApplyWeather(IniSection{ ini, "Weather" }, installer);
+        ApplyVisuals(IniSection{ ini, "Visuals" }, installer);
+        ApplyCamera(IniSection{ ini, "Camera" }, misc, installer);
 
         std::string line = "Mod injected and applied to v1.3 and " + HostMd5();
         if (!installer.Skipped().empty()) line += " (skipped: " + installer.Skipped() + ")";
         WriteLog(directory, line);
 
-        if (popup) eDisplayFrame::ShowPopup();
+        ShowLoadedPopup();
         return 0;
     }
 

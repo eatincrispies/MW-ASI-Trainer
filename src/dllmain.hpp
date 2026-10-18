@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 
 namespace Memory {
@@ -150,6 +151,9 @@ namespace Hook {
     [[nodiscard]] bool VTable(std::optional<ScopedPatch>& slot, std::uintptr_t vtable, std::ptrdiff_t index,
                               const void* replacement, std::uintptr_t& original) noexcept;
 
+    [[nodiscard]] bool RedirectCall(std::optional<ScopedPatch>& slot, std::uintptr_t site, const void* replacement,
+                                    std::uintptr_t& original) noexcept;
+
 }
 
 namespace Game {
@@ -168,3 +172,108 @@ namespace Game {
     }
 
 }
+
+class IniSection {
+public:
+    IniSection(const std::string& path, const char* name) : path_(path), name_(name) {}
+
+    [[nodiscard]] bool Bool(const char* key, bool fallback = false) const;
+    [[nodiscard]] float Float(const char* key, float fallback, float low, float high) const;
+    [[nodiscard]] int Int(const char* key, int fallback, int low, int high) const;
+    [[nodiscard]] bool Has(const char* key) const;
+    [[nodiscard]] std::string String(const char* key) const;
+
+private:
+    [[nodiscard]] std::string Value(const char* key) const;
+
+    const std::string& path_;
+    const char*        name_;
+};
+
+class Installer {
+public:
+    void Toggle(const IniSection& section, const char* key, bool (*install)());
+    void Check(std::string_view feature, bool installed);
+
+    [[nodiscard]] const std::string& Skipped() const noexcept { return skipped_; }
+
+private:
+    std::string skipped_;
+};
+
+namespace UMath {
+
+    struct Vector3 {
+        float x, y, z;
+    };
+
+}
+
+bool AddFrameCallback(void (*callback)()) noexcept;
+
+namespace UTL::COM {
+
+    class IUnknown {
+    public:
+        [[nodiscard]] static bool Resolve() noexcept;
+
+        template <class T>
+        [[nodiscard]] T* QueryInterface() const {
+            return static_cast<T*>(Find(T::_IHandle()));
+        }
+
+        [[nodiscard]] void* Find(std::uintptr_t handle) const;
+    };
+
+}
+
+class IRigidBody : public UTL::COM::IUnknown {
+public:
+    [[nodiscard]] float GetMass() const;
+    [[nodiscard]] const UMath::Vector3& GetPosition() const;
+    [[nodiscard]] const UMath::Vector3& GetLinearVelocity() const;
+    [[nodiscard]] float GetSpeed() const;
+    void SetPosition(const UMath::Vector3& position);
+    void SetLinearVelocity(const UMath::Vector3& velocity);
+};
+
+class ISimable : public UTL::COM::IUnknown {
+public:
+    [[nodiscard]] bool IsPlayer() const;
+    [[nodiscard]] IRigidBody* GetRigidBody() const;
+};
+
+enum DriverClass : int {
+    DRIVER_HUMAN   = 0,
+    DRIVER_TRAFFIC = 1,
+    DRIVER_COP     = 2,
+    DRIVER_RACER   = 3,
+};
+
+class IVehicle : public UTL::COM::IUnknown {
+public:
+    [[nodiscard]] static bool Resolve() noexcept;
+    [[nodiscard]] static std::uintptr_t _IHandle() noexcept;
+
+    [[nodiscard]] ISimable* GetSimable() const;
+    [[nodiscard]] std::uint32_t GetVehicleClass() const;
+    [[nodiscard]] DriverClass GetDriverClass() const;
+    void ForceStopOn(char forceStopBits);
+    [[nodiscard]] char GetForceStop() const;
+    [[nodiscard]] bool IsDestroyed() const;
+    [[nodiscard]] bool IsActive() const;
+    bool SetVehicleOnGround(const UMath::Vector3& position, const UMath::Vector3& forward);
+
+    [[nodiscard]] static bool IsDriver(const IVehicle* vehicle, DriverClass driverClass);
+    [[nodiscard]] static bool IsDriver(const ISimable* simable, DriverClass driverClass);
+};
+
+void ApplyMain(const IniSection& main, Installer& installer);
+void ApplyCareer(const IniSection& career, Installer& installer);
+void ApplyPursuit(const IniSection& pursuit, Installer& installer);
+void ApplyWeather(const IniSection& weather, Installer& installer);
+void ApplyVisuals(const IniSection& visuals, Installer& installer);
+void ApplyCamera(const IniSection& camera, const IniSection& misc, Installer& installer);
+void ApplyQOL(const IniSection& qol, Installer& installer);
+void ApplyMisc(const IniSection& misc, Installer& installer, HMODULE resources);
+void ShowLoadedPopup() noexcept;
